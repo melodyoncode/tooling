@@ -20,10 +20,12 @@ use cpp_semantics::{
 };
 
 use crate::clang_adapter::scope::callable_scope;
-use crate::clang_adapter::source_location::{is_in_main_file, parse_source_location};
+use crate::clang_adapter::source_filter;
+use crate::clang_adapter::source_location::parse_source_location;
+use crate::context::{ExtractedFunction, FunctionDefinitionKey};
 use crate::types::resolver::resolve_type;
 use crate::visitor::SourceFileCache;
-use crate::{context::VisitContext, AstVisitor};
+use crate::{AstVisitor, VisitContext};
 
 pub struct FunctionVisitor;
 
@@ -48,8 +50,8 @@ impl FunctionVisitor {
         source_files: &mut SourceFileCache,
         entity: Entity,
     ) {
-        if let Some(func_def) = Self::extract_function_def(source_files, entity) {
-            ctx.functions.push(func_def);
+        if let Some(function) = Self::extract_function_def(source_files, entity) {
+            ctx.functions.push(function);
         }
     }
 
@@ -58,14 +60,8 @@ impl FunctionVisitor {
     fn extract_function_def(
         source_files: &mut SourceFileCache,
         entity: Entity,
-    ) -> Option<FunctionDef> {
-        if !is_in_main_file(&entity) {
-            log::debug!(
-                "skipping callable '{}': not located in the main file",
-                entity.get_name().unwrap_or_default()
-            );
-            return None;
-        }
+    ) -> Option<ExtractedFunction> {
+        let key = Self::extract_definition_key(&entity)?;
 
         let Some(id) = Self::extract_function_id(&entity) else {
             log::debug!(
@@ -98,11 +94,14 @@ impl FunctionVisitor {
             entity.get_result_type().map(|t| resolve_type(&t))
         };
 
-        Some(FunctionDef {
-            id,
-            kind,
-            return_type,
-            body,
+        Some(ExtractedFunction {
+            key,
+            definition: FunctionDef {
+                id,
+                kind,
+                return_type,
+                body,
+            },
         })
     }
 
@@ -112,6 +111,14 @@ impl FunctionVisitor {
         Some(FunctionId {
             scope: callable_scope(entity)?,
             name: entity.get_name()?,
+        })
+    }
+
+    fn extract_definition_key(entity: &Entity) -> Option<FunctionDefinitionKey> {
+        let location = entity.get_location()?.get_file_location();
+        Some(FunctionDefinitionKey {
+            source_file: location.file?.get_path(),
+            source_offset: location.offset,
         })
     }
 
@@ -182,6 +189,10 @@ impl FunctionVisitor {
                 .find(|c| c.get_kind() == EntityKind::MemberRefExpr)
                 .and_then(|c| c.get_reference())
         })?;
+
+        if source_filter::is_excluded_entity(&resolved) {
+            return None;
+        }
 
         Self::extract_function_kind(&resolved)?;
         Self::extract_function_id(&resolved)

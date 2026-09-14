@@ -161,6 +161,10 @@ crate.spec(
     package = "assert-json-diff",
     version = "2.0.0",
 )
+crate.spec(
+    package = "indexmap",
+    version = "2.7",
+)
 
 # Annotations for libclang
 crate.annotation(

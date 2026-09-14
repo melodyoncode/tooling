@@ -66,6 +66,7 @@ rust_binary(
         "@crates//:clang",
         "@crates//:clap",
         "@crates//:env_logger",
+        "@crates//:indexmap",
         "@crates//:log",
         "@crates//:serde_json",
     ],

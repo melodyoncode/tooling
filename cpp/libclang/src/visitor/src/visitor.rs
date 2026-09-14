@@ -17,7 +17,6 @@ use std::path::{Path, PathBuf};
 use clang::{Entity, EntityKind};
 use log::warn;
 
-use crate::clang_adapter::scope::namespace_id;
 use crate::clang_adapter::source_filter;
 use crate::class_visitor::ClassVisitor;
 use crate::context::VisitContext;
@@ -66,7 +65,7 @@ impl<'a> Visitor<'a> {
     }
 
     fn visit_recursive(&mut self, entity: Entity) {
-        if is_ignored_entity(entity) {
+        if source_filter::is_excluded_entity(&entity) {
             return;
         }
 
@@ -93,15 +92,5 @@ impl<'a> Visitor<'a> {
         for child in entity.get_children() {
             self.visit_recursive(child);
         }
-    }
-}
-
-fn is_ignored_entity(entity: Entity) -> bool {
-    if let Some(location) = entity.get_location() {
-        let (file, _line, _column) = location.get_presumed_location();
-        source_filter::is_external_or_system_path(&file)
-            || source_filter::is_excluded_namespace(namespace_id(&entity).as_deref())
-    } else {
-        false
     }
 }

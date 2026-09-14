@@ -13,6 +13,7 @@
 
 use clap::Parser as ClapParser;
 use env_logger::Builder;
+use indexmap::IndexMap;
 use log::{debug, error, LevelFilter};
 use std::collections::BTreeMap;
 use std::fs;
@@ -22,7 +23,9 @@ use class_diagram::{ClassDiagram, SimpleEntity};
 use class_serializer::ClassSerializer;
 
 use utils::{render_entity_tree, write_debug_json, write_entity_tree, write_fbs_output};
-use visit_tu::{is_external_dependency_path, FunctionDef, VisitContext, Visitor};
+use visit_tu::{
+    is_external_dependency_path, FunctionDef, FunctionDefinitionKey, VisitContext, Visitor,
+};
 
 #[derive(ClapParser, Debug)]
 #[command(name = "cpp_parser")]
@@ -50,7 +53,7 @@ struct Args {
 #[derive(Default)]
 struct ParseOutputs {
     types: BTreeMap<String, SimpleEntity>,
-    functions: Vec<FunctionDef>,
+    functions: IndexMap<FunctionDefinitionKey, FunctionDef>,
 }
 
 impl ParseOutputs {
@@ -66,7 +69,11 @@ impl ParseOutputs {
             self.types.insert(type_name, entity);
         }
 
-        self.functions.extend(ctx.functions);
+        for function in ctx.functions {
+            self.functions
+                .entry(function.key)
+                .or_insert(function.definition);
+        }
     }
 }
 
@@ -214,7 +221,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(debug_json_output) = &command_line_args.debug_json_output {
-        write_debug_json(debug_json_output, &outputs.types, &outputs.functions)?;
+        let functions: Vec<_> = outputs.functions.values().collect();
+        write_debug_json(debug_json_output, &outputs.types, &functions)?;
     }
 
     serialize_class_diagram(&command_line_args.class_fbs_output, outputs.types)?;
